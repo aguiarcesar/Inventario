@@ -6,11 +6,36 @@ app = Flask(__name__)
 app.secret_key = "chave_secreta_para_alertas"  # Necessário para usar flash messages
 NOME_BANCO = "banco_estoque.db"
 
+# ==============================================================================
+# CONFIGURAÇÃO E INICIALIZAÇÃO DO BANCO DE DADOS
+# ==============================================================================
 def obter_conexao():
     conn = sqlite3.connect(NOME_BANCO)
     conn.row_factory = sqlite3.Row  # Permite acessar colunas pelo nome
     return conn
 
+def inicializar_banco():
+    """Garante que as tabelas necessárias existam no servidor (Evita Erro 500)"""
+    conn = obter_conexao()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS produtos (
+            sku TEXT PRIMARY KEY,
+            ean TEXT UNIQUE,
+            descricao TEXT,
+            localizacao TEXT,
+            quantidade INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Executa a criação da tabela assim que a aplicação sobe no Render
+inicializar_banco()
+
+
+# ==============================================================================
+# VALIDATÓRIOS
+# ==============================================================================
 # Validador de formato SKU (5 dígitos - hífen - 10 dígitos)
 def validar_sku(sku):
     padrao = r'^\d{5}-\d{10}$'
@@ -110,11 +135,11 @@ def inventariar_item():
 # ==============================================================================
 # @app.route('/movimentar', methods=['GET', 'POST'])
 # def movimentar():
-#     return "Módulo não disponível na versão de demonstração."
+#      return "Módulo não disponível na versão de demonstração."
 
 # @app.route('/api/buscar_produto')
 # def buscar_produto():
-#     return jsonify([])
+#      return jsonify([])
 
 
 if __name__ == '__main__':
