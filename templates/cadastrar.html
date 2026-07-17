@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center animate__animated animate__fadeIn">
+    <div class="col-12 col-md-8 col-lg-6">
+        <div class="card border-0 shadow-sm rounded-3 mt-4">
+            <div class="card-header bg-dark text-white pt-4 pb-3">
+                <h4 class="card-title fw-bold m-0 text-center">
+                    <i class="bi bi-plus-circle me-2 text-warning"></i>Cadastrar Novo SKU
+                </h4>
+            </div>
+            <div class="card-body p-4">
+                
+                <form action="{{ url_for('cadastrar') }}" method="POST" id="formCadastro">
+                    <!-- SKU -->
+                    <div class="mb-3">
+                        <label for="sku" class="form-label fw-semibold">SKU do Produto</label>
+                        <input type="text" class="form-control form-control-lg" id="sku" name="sku" placeholder="Ex: 12345-1234567890" required autocomplete="off">
+                        <div class="form-text text-muted">Deve seguir o padrão de 16 dígitos (5 números, hífen, 10 números).</div>
+                    </div>
+
+                    <!-- EAN (Código de barras) -->
+                    <div class="mb-3">
+                        <label for="ean" class="form-label fw-semibold">Código de Barras (EAN)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-upc-scan"></i></span>
+                            <input type="text" class="form-control form-control-lg" id="ean" name="ean" placeholder="Ex: 7891234567890" required autocomplete="off">
+                        </div>
+                        <div class="form-text text-muted">Insira exatamente os 13 dígitos numéricos do EAN.</div>
+                    </div>
+
+                    <!-- Descrição -->
+                    <div class="mb-3">
+                        <label for="descricao" class="form-label fw-semibold">Descrição do Produto</label>
+                        <input type="text" class="form-control form-control-lg" id="descricao" name="descricao" placeholder="Ex: Cueca Boxer Lupo Algodão Azul M" required maxlength="90" required autocomplete="off">
+                    </div>
+
+                    <div class="row">
+                        <!-- Localização -->
+                        <div class="col-6 mb-3">
+                            <label for="localizacao" class="form-label fw-semibold">📍 Localização</label>
+                            <input type="text" class="form-control form-control-lg" id="localizacao" name="localizacao" placeholder="Ex: Prateleira A1" required autocomplete="off">
+                        </div>
+
+                        <!-- Quantidade Inicial -->
+                        <div class="col-6 mb-4">
+                            <label for="quantidade_inicial" class="form-label fw-semibold">Qtd. Inicial</label>
+                            <input type="number" class="form-control form-control-lg" id="quantidade_inicial" name="quantidade_inicial" min="0" value="0" required>
+                        </div>
+                    </div>
+
+                    <!-- Botões de Ação -->
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-dark btn-lg fw-bold">
+                            <i class="bi bi-check-circle me-1 text-warning"></i>Confirmar Cadastro
+                        </button>
+                        <a href="{{ url_for('index') }}" class="btn btn-light border btn-lg text-muted fw-bold">
+                            Cancelar
+                        </a>
+                    </div>
+                </form>
+                
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

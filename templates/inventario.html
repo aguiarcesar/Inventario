@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4 animate__animated animate__fadeIn">
+    <div class="row">
+        <!-- Coluna da Esquerda: Área do Bipe -->
+        <div class="col-12 col-lg-5 mb-4">
+            <div class="card border-0 shadow-sm rounded-3 bg-dark text-white p-4 text-center">
+                <h4 class="fw-bold mb-3">
+                    <i class="bi bi-box-seam me-2 text-warning"></i>Contagem de Inventário
+                </h4>
+                <p class="text-muted small">Passe o leitor de código de barras ou digite o EAN do produto abaixo.</p>
+                
+                <!-- Input de captura do Leitor -->
+                <div class="mb-3">
+                    <input type="text" class="form-control form-control-lg text-center fw-bold fs-4" 
+                           id="input-leitor" placeholder="BIPE O PRODUTO AQUI" autocomplete="off">
+                </div>
+                
+                <div id="status-leitor" class="text-warning small fw-semibold py-1">Aguardando primeira leitura...</div>
+            </div>
+
+            <!-- Resumo Rápido da Sessão -->
+            <div class="card border-0 shadow-sm rounded-3 mt-3 p-3 bg-light">
+                <div class="row text-center">
+                    <div class="col-6 border-end">
+                        <small class="text-muted d-block">Total de Peças</small>
+                        <span id="total-pecas" class="fs-3 fw-bold text-dark">0</span>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted d-block">Modelos Distintos</small>
+                        <span id="total-modelos" class="fs-3 fw-bold text-primary">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botões de Controle -->
+            <div class="d-grid gap-2 mt-3">
+                <button class="btn btn-warning btn-lg fw-bold text-dark" id="btn-concluir" onclick="concluirInventario()">
+                    <i class="bi bi-file-earmark-bar-graph me-1"></i>Concluir e Gerar Relatório
+                </button>
+                <button class="btn btn-outline-danger btn-sm fw-bold" onclick="resetarInventario()">
+                    Limpar Contagem Atual
+                </button>
+            </div>
+        </div>
+
+        <!-- Coluna da Direita: Lista em Tempo Real / Relatório Final -->
+        <div class="col-12 col-lg-7">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center py-3">
+                    <h5 class="fw-bold m-0 text-secondary" id="titulo-tabela">
+                        <i class="bi bi-list-check me-2"></i>Itens Lidos na Sessão
+                    </h5>
+                    <!-- Grupo de botões de exportação (ficam escondidos até concluir) -->
+                    <div class="d-none" id="acoes-relatorio">
+                        <button class="btn btn-sm btn-outline-success me-1 fw-semibold" onclick="exportarParaPlanilha()">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Exportar Planilha
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="window.print()">
+                            <i class="bi bi-printer me-1"></i>Imprimir PDF
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle m-0" id="tabela-inventario">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>EAN / SKU</th>
+                                    <th>Descrição do Item</th>
+                                    <th class="text-center" style="width: 120px;">Quantidade</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpo-tabela-inventario">
+                                <tr id="linha-vazia">
+                                    <td colspan="3" class="text-center py-5 text-muted">
+                                        <i class="bi bi-upc-scan fs-1 d-block mb-2 text-secondary"></i>
+                                        Nenhum item bipado nesta sessão ainda.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Som de Sucesso/Erro para dar feedback ao operador sem ele precisar olhar pra tela -->
+<audio id="som-sucesso" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav" preload="auto"></audio>
+<audio id="som-erro" src="https://assets.mixkit.co/active_storage/sfx/951/951-600.wav" preload="auto"></audio>
+
+<script>
+let itensInventariados = {}; // Estrutura: { 'EAN': { sku, descricao, qtd } }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const inputLeitor = document.getElementById('input-leitor');
+    const statusLeitor = document.getElementById('status-leitor');
+    const somSucesso = document.getElementById('som-sucesso');
+    const somErro = document.getElementById('som-erro');
+
+    // Mantém o foco no campo de texto o tempo todo (essencial para leitores de código de barras)
+    inputLeitor.focus();
+    document.addEventListener('click', () => inputLeitor.focus());
+
+    // Captura o BIP (Leitores geralmente simulam a tecla ENTER ao final da leitura)
+    inputLeitor.addEventListener('keypress', async function(e) {
+        if (e.key === 'Enter') {
+            const codigo = inputLeitor.value.trim();
+            inputLeitor.value = ''; // Limpa imediatamente para o próximo bip
+
+            if (!codigo) return;
+
+            try {
+                statusLeitor.innerHTML = `<span class="text-info">Buscando ${codigo}...</span>`;
+                const response = await fetch(`/api/inventariar_item?q=${encodeURIComponent(codigo)}`);
+                const data = await response.json();
+
+                if (data.sucesso) {
+                    somSucesso.play();
+                    statusLeitor.innerHTML = `<span class="text-success">✓ ${data.descricao} adicionado!</span>`;
+                    
+                    // Soma 1 unidade na memória do inventário corrente
+                    if (itensInventariados[data.ean]) {
+                        itensInventariados[data.ean].quantidade += 1;
+                    } else {
+                        itensInventariados[data.ean] = {
+                            sku: data.sku,
+                            descricao: data.descricao,
+                            quantidade: 1
+                        };
+                    }
+                    
+                    atualizarTabelaInterface();
+                } else {
+                    executarErro(`Código ${codigo} não encontrado.`);
+                }
+            } catch (err) {
+                executarErro("Erro de comunicação com o servidor.");
+            }
+        }
+    });
+
+    function ejecutarErro(msg) {
+        somErro.play();
+        statusLeitor.innerHTML = `<span class="text-danger">⚠ ${msg}</span>`;
+    }
+});
+
+function atualizarTabelaInterface() {
+    const tbody = document.getElementById('corpo-tabela-inventario');
+    const totalPecasSpan = document.getElementById('total-pecas');
+    const totalModelosSpan = document.getElementById('total-modelos');
+    
+    tbody.innerHTML = '';
+    
+    let chaves = Object.keys(itensInventariados);
+    let totalPecas = 0;
+    
+    if (chaves.length === 0) {
+        tbody.innerHTML = `
+            <tr id="linha-vazia">
+                <td colspan="3" class="text-center py-5 text-muted">
+                    <i class="bi bi-upc-scan fs-1 d-block mb-2 text-secondary"></i>
+                    Nenhum item bipado nesta sessão ainda.
+                </td>
+            </tr>`;
+        totalPecasSpan.textContent = '0';
+        totalModelosSpan.textContent = '0';
+        return;
+    }
+
+    chaves.forEach(ean => {
+        const item = itensInventariados[ean];
+        totalPecas += item.quantidade;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <span class="fw-bold text-dark d-block">${ean}</span>
+                <small class="text-muted fs-7">SKU: ${item.sku}</small>
+            </td>
+            <td class="fw-semibold text-secondary">${item.descricao}</td>
+            <td class="text-center fw-bold fs-5 text-primary bg-light">${item.quantidade}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    totalPecasSpan.textContent = totalPecas;
+    totalModelosSpan.textContent = chaves.length;
+}
+
+function concluirInventario() {
+    if (Object.keys(itensInventariados).length === 0) {
+        alert("Não há itens bipados para concluir o relatório.");
+        return;
+    }
+    
+    // Transforma a tela em modo Relatório Final Estático
+    document.getElementById('input-leitor').disabled = true;
+    document.getElementById('status-leitor').innerHTML = '<span class="text-success fs-5 fw-bold">✓ INVENTÁRIO CONCLUÍDO</span>';
+    document.getElementById('titulo-tabela').innerHTML = '<i class="bi bi-file-earmark-check text-success me-2"></i>Relatório Final de Auditoria';
+    document.getElementById('acoes-relatorio').classList.remove('d-none');
+    document.getElementById('btn-concluir').disabled = true;
+}
+
+function resetarInventario() {
+    if (confirm("Deseja realmente apagar a contagem atual e começar do zero?")) {
+        itensInventariados = {};
+        document.getElementById('input-leitor').disabled = false;
+        document.getElementById('btn-concluir').disabled = false;
+        document.getElementById('acoes-relatorio').classList.add('d-none');
+        document.getElementById('titulo-tabela').innerHTML = '<i class="bi bi-list-check me-2"></i>Itens Lidos na Sessão';
+        atualizarTabelaInterface();
+        document.getElementById('input-leitor').focus();
+    }
+}
+
+// NOVA FUNÇÃO: Gera a planilha Excel/CSV direto pelo navegador
+function exportarParaPlanilha() {
+    if (Object.keys(itensInventariados).length === 0) return;
+
+    // Cabeçalho da planilha (Separado por ponto e vírgula para abrir perfeitamente no Excel em português)
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // \uFEFF força o Excel a reconhecer acentos (UTF-8)
+    csvContent += "EAN;SKU;Descrição do Produto;Quantidade Contada\n";
+
+    // Adiciona as linhas dos produtos
+    Object.keys(itensInventariados).forEach(ean => {
+        const item = itensInventariados[ean];
+        // Remove eventuais pontos e vírgulas da descrição para não quebrar as colunas do Excel
+        const descricaoLimpa = item.descricao.replace(/;/g, ' '); 
+        csvContent += `${ean};${item.sku};${descricaoLimpa};${item.quantidade}\n`;
+    });
+
+    // Cria a data atual para dar nome ao arquivo
+    const dataAtual = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    const nomeArquivo = `inventario_estoque_${dataAtual}.csv`;
+
+    // Cria um link invisível e força o download do arquivo
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", nomeArquivo);
+    document.body.appendChild(link);
+    
+    link.click(); // Dispara o download
+    document.body.removeChild(link); // Remove o elemento da tela
+}
+</script>
+{% endblock %}
